@@ -25,7 +25,9 @@ func ABCIQuery(
 		Prove:      prove,
 		RemoteAddr: ctx.HTTPReq.RemoteAddr, // add by seanxu
 	})
+
 	if err != nil {
+
 		return nil, err
 	}
 
