@@ -544,7 +544,7 @@ func newReactorStore(
 		lastCommit := types.NewCommit(blockHeight-1, 0, types.BlockID{}, nil)
 		if blockHeight > 1 {
 			lastBlockMeta := blockStore.LoadBlockMeta(blockHeight - 1)
-			lastBlock := blockStore.LoadBlock(blockHeight - 1)
+			lastBlock := blockStore.LoadBlock(blockHeight-1, false)
 			vote, err := types.MakeVote(
 				lastBlock.Header.Height,
 				lastBlockMeta.BlockID,

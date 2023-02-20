@@ -22,7 +22,7 @@ type BlockStore interface {
 
 	LoadBaseMeta() *types.BlockMeta
 	LoadBlockMeta(height int64) *types.BlockMeta
-	LoadBlock(height int64) *types.Block
+	LoadBlock(height int64, forRespondToPeer bool) *types.Block
 
 	SaveBlock(block *types.Block, blockParts *types.PartSet, seenCommit *types.Commit)
 

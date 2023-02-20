@@ -10,6 +10,7 @@ import (
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	"github.com/tendermint/tendermint/state/txindex/null"
+	"github.com/tendermint/tendermint/store"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -37,7 +38,7 @@ func Tx(ctx *rpctypes.Context, hash []byte, prove bool) (*ctypes.ResultTx, error
 
 	var proof types.TxProof
 	if prove {
-		block := env.BlockStore.LoadBlock(height)
+		block := env.BlockStore.LoadBlock(height, false)
 		proof = block.Data.Txs.Proof(int(index)) // XXX: overflow on 32-bit machines
 	}
 
@@ -115,20 +116,35 @@ func TxSearch(
 	for i := skipCount; i < skipCount+pageSize; i++ {
 		r := results[i]
 
-		var proof types.TxProof
-		if prove {
-			block := env.BlockStore.LoadBlock(r.Height)
-			proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
+		// add by seanxu
+		bIgnonore := false
+		if store.CheckBlockCallback != nil {
+			err := store.CheckBlockCallback(r.Height, nil)
+
+			if err != nil {
+				// panic(err)
+				bIgnonore = true
+				totalCount--
+			}
+
 		}
 
-		apiResults = append(apiResults, &ctypes.ResultTx{
-			Hash:     types.Tx(r.Tx).Hash(),
-			Height:   r.Height,
-			Index:    r.Index,
-			TxResult: r.Result,
-			Tx:       r.Tx,
-			Proof:    proof,
-		})
+		if !bIgnonore {
+			var proof types.TxProof
+			if prove {
+				block := env.BlockStore.LoadBlock(r.Height, false)
+				proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
+			}
+
+			apiResults = append(apiResults, &ctypes.ResultTx{
+				Hash:     types.Tx(r.Tx).Hash(),
+				Height:   r.Height,
+				Index:    r.Index,
+				TxResult: r.Result,
+				Tx:       r.Tx,
+				Proof:    proof,
+			})
+		}
 	}
 
 	return &ctypes.ResultTxSearch{Txs: apiResults, TotalCount: totalCount}, nil

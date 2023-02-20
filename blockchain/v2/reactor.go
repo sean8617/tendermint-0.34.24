@@ -23,7 +23,7 @@ const (
 )
 
 type blockStore interface {
-	LoadBlock(height int64) *types.Block
+	LoadBlock(height int64, forRespondToPeer bool) *types.Block
 	SaveBlock(*types.Block, *types.PartSet, *types.Commit)
 	Base() int64
 	Height() int64
@@ -471,7 +471,7 @@ func (r *BlockchainReactor) ReceiveEnvelope(e p2p.Envelope) {
 		}
 
 	case *bcproto.BlockRequest:
-		block := r.store.LoadBlock(msg.Height)
+		block := r.store.LoadBlock(msg.Height, false)
 		if block != nil {
 			if err := r.io.sendBlockToPeer(block, e.Src.ID()); err != nil {
 				r.logger.Error("Could not send block message to peer: ", err)

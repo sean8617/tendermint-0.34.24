@@ -95,7 +95,8 @@ func (bs *BlockStore) LoadBaseMeta() *types.BlockMeta {
 
 // LoadBlock returns the block with the given height.
 // If no block is found for that height, it returns nil.
-func (bs *BlockStore) LoadBlock(height int64) *types.Block {
+func (bs *BlockStore) LoadBlock(height int64, forRespondToPeer bool) *types.Block {
+
 	var blockMeta = bs.LoadBlockMeta(height)
 	if blockMeta == nil {
 		return nil
@@ -124,14 +125,15 @@ func (bs *BlockStore) LoadBlock(height int64) *types.Block {
 		panic(fmt.Errorf("error from proto block: %w", err))
 	}
 
-	// add by seanxu
-	if CheckBlockCallback != nil {
+	// add by seanxu. if  forRespondToPeer==true, used for p2p
+	if CheckBlockCallback != nil && !forRespondToPeer {
 		if len(block.Data.Txs) > 0 {
 			tx := block.Data.Txs[0]
 			err := CheckBlockCallback(block.Header.Height, tx)
 
 			if err != nil {
 				panic(err)
+				// block = &types.Block{}
 			}
 
 		}
@@ -158,7 +160,7 @@ func (bs *BlockStore) LoadBlockByHash(hash []byte) *types.Block {
 	if err != nil {
 		panic(fmt.Sprintf("failed to extract height from %s: %v", s, err))
 	}
-	return bs.LoadBlock(height)
+	return bs.LoadBlock(height, false)
 }
 
 // LoadBlockPart returns the Part at the given index

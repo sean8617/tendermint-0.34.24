@@ -25,7 +25,7 @@ func (m *mockBlockStore) Base() int64 {
 	return m.base
 }
 
-func (m *mockBlockStore) LoadBlock(i int64) *types.Block {
+func (m *mockBlockStore) LoadBlock(i int64, forRespondToPeer bool) *types.Block {
 	return m.blocks[i-m.base]
 }
 

@@ -58,7 +58,7 @@ func (_m *BlockStore) LoadBaseMeta() *types.BlockMeta {
 }
 
 // LoadBlock provides a mock function with given fields: height
-func (_m *BlockStore) LoadBlock(height int64) *types.Block {
+func (_m *BlockStore) LoadBlock(height int64, forRespondToPeer bool) *types.Block {
 	ret := _m.Called(height)
 
 	var r0 *types.Block

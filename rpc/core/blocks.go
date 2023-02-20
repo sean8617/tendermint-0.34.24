@@ -84,7 +84,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	block := env.BlockStore.LoadBlock(height)
+	block := env.BlockStore.LoadBlock(height, false)
 	blockMeta := env.BlockStore.LoadBlockMeta(height)
 	if blockMeta == nil {
 		return &ctypes.ResultBlock{BlockID: types.BlockID{}, Block: block}, nil
@@ -210,7 +210,7 @@ func BlockSearch(
 
 	apiResults := make([]*ctypes.ResultBlock, 0, pageSize)
 	for i := skipCount; i < skipCount+pageSize; i++ {
-		block := env.BlockStore.LoadBlock(results[i])
+		block := env.BlockStore.LoadBlock(results[i], false)
 		if block != nil {
 			blockMeta := env.BlockStore.LoadBlockMeta(block.Height)
 			if blockMeta != nil {

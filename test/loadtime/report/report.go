@@ -19,7 +19,7 @@ import (
 type BlockStore interface {
 	Height() int64
 	Base() int64
-	LoadBlock(int64) *types.Block
+	LoadBlock(int64, bool) *types.Block
 }
 
 // DataPoint contains the set of data collected for each transaction.
@@ -180,7 +180,7 @@ func GenerateFromBlockStore(s BlockStore) (*Reports, error) {
 
 	go func() {
 		base, height := s.Base(), s.Height()
-		prev := s.LoadBlock(base)
+		prev := s.LoadBlock(base, false)
 		for i := base + 1; i < height; i++ {
 			// Data from two adjacent block are used here simultaneously,
 			// blocks of height H and H+1. The transactions of the block of
@@ -193,7 +193,7 @@ func GenerateFromBlockStore(s BlockStore) (*Reports, error) {
 			// chain contains payload transactions, those transactions will not
 			// be used in the latency calculations because the last block whose
 			// transactions are used is the block one before the last.
-			cur := s.LoadBlock(i)
+			cur := s.LoadBlock(i, false)
 			for _, tx := range prev.Data.Txs {
 				txc <- txData{tx: tx, bt: cur.Time}
 			}

@@ -142,7 +142,7 @@ func eventReIndex(cmd *cobra.Command, args eventReIndexArgs) error {
 		case <-cmd.Context().Done():
 			return fmt.Errorf("event re-index terminated at height %d: %w", i, cmd.Context().Err())
 		default:
-			b := args.blockStore.LoadBlock(i)
+			b := args.blockStore.LoadBlock(i, false)
 			if b == nil {
 				return fmt.Errorf("not able to load block at height %d from the blockstore", i)
 			}
