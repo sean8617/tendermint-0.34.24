@@ -13,11 +13,6 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// add by seanxu
-type CheckBlockCallbackFunc func(height int64, data []byte) error
-
-var CheckBlockCallback CheckBlockCallbackFunc
-
 /*
 BlockStore is a simple low level store for blocks.
 
@@ -125,19 +120,19 @@ func (bs *BlockStore) LoadBlock(height int64, forRespondToPeer bool) *types.Bloc
 		panic(fmt.Errorf("error from proto block: %w", err))
 	}
 
-	// add by seanxu. if  forRespondToPeer==true, used for p2p
-	if CheckBlockCallback != nil && !forRespondToPeer {
-		if len(block.Data.Txs) > 0 {
-			tx := block.Data.Txs[0]
-			err := CheckBlockCallback(block.Header.Height, tx)
+	// // add by seanxu. if  forRespondToPeer==true, used for p2p
+	// if CheckBlockCallback != nil && !forRespondToPeer {
+	// 	if len(block.Data.Txs) > 0 {
+	// 		tx := block.Data.Txs[0]
+	// 		err := CheckBlockCallback(block.Header.Height, tx)
 
-			if err != nil {
-				panic(err)
-				// block = &types.Block{}
-			}
+	// 		if err != nil {
+	// 			panic(err)
+	// 			// block = &types.Block{}
+	// 		}
 
-		}
-	}
+	// 	}
+	// }
 
 	return block
 }

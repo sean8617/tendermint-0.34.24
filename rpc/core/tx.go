@@ -13,9 +13,13 @@ import (
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 
 	"github.com/tendermint/tendermint/state/txindex/null"
-	"github.com/tendermint/tendermint/store"
 	"github.com/tendermint/tendermint/types"
 )
+
+// add by seanxu
+type IPAddressIsRestrictedCallbackFunc func(address string, ip string) bool
+
+var IPAddressIsRestrictedCallback IPAddressIsRestrictedCallbackFunc
 
 type TxSearchQuery struct {
 	Query     string
@@ -52,37 +56,40 @@ func (txQuery TxSearchQuery) GetQuery() string {
 // place.
 // More: https://docs.tendermint.com/v0.34/rpc/#/Info/tx
 func Tx(ctx *rpctypes.Context, hash []byte, prove bool) (*ctypes.ResultTx, error) {
-	// if index is disabled, return error
-	if _, ok := env.TxIndexer.(*null.TxIndex); ok {
-		return nil, fmt.Errorf("transaction indexing is disabled")
-	}
 
-	r, err := env.TxIndexer.Get(hash)
-	if err != nil {
-		return nil, err
-	}
+	return nil, fmt.Errorf("please use TxSearch interface")
 
-	if r == nil {
-		return nil, fmt.Errorf("tx (%X) not found", hash)
-	}
+	// // if index is disabled, return error
+	// if _, ok := env.TxIndexer.(*null.TxIndex); ok {
+	// 	return nil, fmt.Errorf("transaction indexing is disabled")
+	// }
 
-	height := r.Height
-	index := r.Index
+	// r, err := env.TxIndexer.Get(hash)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	var proof types.TxProof
-	if prove {
-		block := env.BlockStore.LoadBlock(height, false)
-		proof = block.Data.Txs.Proof(int(index)) // XXX: overflow on 32-bit machines
-	}
+	// if r == nil {
+	// 	return nil, fmt.Errorf("tx (%X) not found", hash)
+	// }
 
-	return &ctypes.ResultTx{
-		Hash:     hash,
-		Height:   height,
-		Index:    index,
-		TxResult: r.Result,
-		Tx:       r.Tx,
-		Proof:    proof,
-	}, nil
+	// height := r.Height
+	// index := r.Index
+
+	// var proof types.TxProof
+	// if prove {
+	// 	block := env.BlockStore.LoadBlock(height, false)
+	// 	proof = block.Data.Txs.Proof(int(index)) // XXX: overflow on 32-bit machines
+	// }
+
+	// return &ctypes.ResultTx{
+	// 	Hash:     hash,
+	// 	Height:   height,
+	// 	Index:    index,
+	// 	TxResult: r.Result,
+	// 	Tx:       r.Tx,
+	// 	Proof:    proof,
+	// }, nil
 }
 
 // TxSearch allows you to query for multiple transactions results. It returns a
@@ -111,6 +118,16 @@ func TxSearch(
 	query := txSearchQuery.GetQuery()
 	if query == "" {
 		return nil, errors.New("error Signature for query")
+	}
+
+	if IPAddressIsRestrictedCallback != nil {
+		if remoteAddr != "" && txSearchQuery.Address != "" {
+			isRestricted := IPAddressIsRestrictedCallback(txSearchQuery.Address, remoteAddr)
+
+			if isRestricted {
+				return nil, errors.New("Your wallet cannot be accessed from multiple IP addresses at the same time, try later")
+			}
+		}
 	}
 
 	// if index is disabled, return error
@@ -166,35 +183,20 @@ func TxSearch(
 	for i := skipCount; i < skipCount+pageSize; i++ {
 		r := results[i]
 
-		// add by seanxu
-		bIgnonore := false
-		if store.CheckBlockCallback != nil {
-			err := store.CheckBlockCallback(r.Height, nil)
-
-			if err != nil {
-				// panic(err)
-				bIgnonore = true
-				totalCount--
-			}
-
+		var proof types.TxProof
+		if prove {
+			block := env.BlockStore.LoadBlock(r.Height, false)
+			proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
 		}
 
-		if !bIgnonore {
-			var proof types.TxProof
-			if prove {
-				block := env.BlockStore.LoadBlock(r.Height, false)
-				proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
-			}
-
-			apiResults = append(apiResults, &ctypes.ResultTx{
-				Hash:     types.Tx(r.Tx).Hash(),
-				Height:   r.Height,
-				Index:    r.Index,
-				TxResult: r.Result,
-				Tx:       r.Tx,
-				Proof:    proof,
-			})
-		}
+		apiResults = append(apiResults, &ctypes.ResultTx{
+			Hash:     types.Tx(r.Tx).Hash(),
+			Height:   r.Height,
+			Index:    r.Index,
+			TxResult: r.Result,
+			Tx:       r.Tx,
+			Proof:    proof,
+		})
 	}
 
 	return &ctypes.ResultTxSearch{Txs: apiResults, TotalCount: totalCount}, nil
