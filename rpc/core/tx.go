@@ -1,18 +1,51 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmquery "github.com/tendermint/tendermint/libs/pubsub/query"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+
 	"github.com/tendermint/tendermint/state/txindex/null"
 	"github.com/tendermint/tendermint/store"
 	"github.com/tendermint/tendermint/types"
 )
+
+type TxSearchQuery struct {
+	Query     string
+	Address   string
+	Signature []byte
+	PublicKey []byte
+
+	// PublicKey *cryptotypes.PubKey
+}
+
+func (txQuery TxSearchQuery) GetQuery() string {
+
+	var secp256k1PubKey secp256k1.PubKey
+
+	err := secp256k1PubKey.Unmarshal(txQuery.PublicKey)
+	if err == nil {
+
+		// pubKey, _ := secp256k1PubKey..(cryptotypes.PubKey)
+		// if pubKey != nil {
+		ok := secp256k1PubKey.VerifySignature([]byte(txQuery.Address), txQuery.Signature)
+
+		if ok {
+			return txQuery.Query
+		}
+		// }
+	}
+
+	return ""
+
+}
 
 // Tx allows you to query the transaction results. `nil` could mean the
 // transaction is in the mempool, invalidated, or was not sent in the first
@@ -55,13 +88,30 @@ func Tx(ctx *rpctypes.Context, hash []byte, prove bool) (*ctypes.ResultTx, error
 // TxSearch allows you to query for multiple transactions results. It returns a
 // list of transactions (maximum ?per_page entries) and the total count.
 // More: https://docs.tendermint.com/v0.34/rpc/#/Info/tx_search
+// modify by seanxu
+// 隐私链，查询时需要对钱包地址进行签名
 func TxSearch(
 	ctx *rpctypes.Context,
-	query string,
+	jsonQuery string,
 	prove bool,
 	pagePtr, perPagePtr *int,
 	orderBy string,
 ) (*ctypes.ResultTxSearch, error) {
+
+	var txSearchQuery TxSearchQuery
+	err := json.Unmarshal([]byte(jsonQuery), &txSearchQuery)
+	if err != nil {
+		return nil, errors.New("query need json format for Signature")
+	}
+
+	// 这里添加远程IP锁定策略
+	remoteAddr := ctx.HTTPReq.RemoteAddr
+	fmt.Printf("remoteAddr=%s\n", remoteAddr)
+
+	query := txSearchQuery.GetQuery()
+	if query == "" {
+		return nil, errors.New("error Signature for query")
+	}
 
 	// if index is disabled, return error
 	if _, ok := env.TxIndexer.(*null.TxIndex); ok {

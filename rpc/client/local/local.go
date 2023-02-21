@@ -182,13 +182,15 @@ func (c *Local) Tx(ctx context.Context, hash []byte, prove bool) (*ctypes.Result
 }
 
 func (c *Local) TxSearch(
-	_ context.Context,
+	ctx context.Context,
 	query string,
 	prove bool,
 	page,
 	perPage *int,
 	orderBy string,
 ) (*ctypes.ResultTxSearch, error) {
+	k := ctx
+	_ = k
 	return core.TxSearch(c.ctx, query, prove, page, perPage, orderBy)
 }
 
