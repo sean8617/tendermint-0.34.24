@@ -23,6 +23,11 @@ const (
 	tagKeySeparator = "/"
 )
 
+// add by seanxu
+type TranslateMemoCallbackFunc func(memo string) string
+
+var TranslateMemoCallback TranslateMemoCallbackFunc
+
 var _ txindex.TxIndexer = (*TxIndex)(nil)
 
 // TxIndex is the simplest possible indexer, backed by key-value storage (levelDB).
@@ -64,11 +69,19 @@ func (txi *TxIndex) Get(hash []byte, authorized bool) (*abci.TxResult, error) {
 		var txData tx.Tx
 		err = txData.Unmarshal(txResult.Tx)
 		if err == nil {
-			txData.Body.Memo = "******"
-			fmt.Println(txData)
-			data, err := txData.Marshal()
-			if err == nil {
-				txResult.Tx = data
+			memo := strings.Trim(txData.Body.Memo, " ")
+			if memo != "" {
+				if TranslateMemoCallback != nil {
+					txData.Body.Memo = TranslateMemoCallback(txData.Body.Memo)
+
+				} else {
+					txData.Body.Memo = "******"
+				}
+				fmt.Println(txData)
+				data, err := txData.Marshal()
+				if err == nil {
+					txResult.Tx = data
+				}
 			}
 		}
 	}

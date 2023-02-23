@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	tx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/gogo/protobuf/proto"
@@ -11,6 +12,7 @@ import (
 	tmsync "github.com/tendermint/tendermint/libs/sync"
 	tmstore "github.com/tendermint/tendermint/proto/tendermint/store"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/tendermint/tendermint/state/txindex/kv"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -142,11 +144,19 @@ func (bs *BlockStore) LoadBlock(height int64, forRespondToPeer bool) *types.Bloc
 			var txData tx.Tx
 			err := txData.Unmarshal(block.Data.Txs[n])
 			if err == nil {
-				txData.Body.Memo = "******"
-				fmt.Println(txData)
-				data, err := txData.Marshal()
-				if err == nil {
-					block.Data.Txs[n] = data
+				memo := strings.Trim(txData.Body.Memo, " ")
+				if memo != "" {
+					if kv.TranslateMemoCallback != nil {
+						txData.Body.Memo = kv.TranslateMemoCallback(txData.Body.Memo)
+
+					} else {
+						txData.Body.Memo = "******"
+					}
+					fmt.Println(txData)
+					data, err := txData.Marshal()
+					if err == nil {
+						block.Data.Txs[n] = data
+					}
 				}
 			}
 		}

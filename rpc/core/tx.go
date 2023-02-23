@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	"github.com/cosmos/cosmos-sdk/types/tx"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmquery "github.com/tendermint/tendermint/libs/pubsub/query"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
@@ -230,14 +232,60 @@ func TxSearch(
 		}
 
 		if findAddress {
+			hash := types.Tx(r.Tx).Hash()
 			var proof types.TxProof
 			if prove {
 				block := env.BlockStore.LoadBlock(r.Height, authorized)
 				proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
 			}
 
+			if !authorized {
+				var txData tx.Tx
+				err := txData.Unmarshal(r.Tx)
+				if err == nil {
+					memo := txData.Body.Memo
+					n1 := strings.Index(memo, "***")
+					n2 := strings.LastIndex(memo, "***")
+					end := len(memo) - 3
+					// 检测到敏感词的格式为： ***XXXXXXXX***
+					if n1 == 0 && n2 > n1 && n2 == end {
+						//获取真实的 hash
+						block := env.BlockStore.LoadBlock(r.Height, true)
+						for n := 0; n < len(block.Data.Txs); n++ {
+
+							var txData1 tx.Tx
+							err := txData1.Unmarshal(block.Data.Txs[n])
+							if err == nil {
+
+								// 签名相等
+								if len(txData1.Signatures) == len(txData.Signatures) && len(txData1.Signatures) > 0 {
+									if bytes.Equal(txData1.Signatures[0], txData.Signatures[0]) {
+										hash = types.Tx(block.Data.Txs[n]).Hash()
+										break
+
+									}
+
+								}
+
+							}
+
+							// s := string(block.Data.Txs[n])
+							// i := strings.Index(s, "/cosmos.bank.v1beta1.MsgSend")
+							// if i > 0 {
+							// 	hash = types.Tx(block.Data.Txs[n]).Hash()
+							// 	break
+							// }
+
+						}
+
+					}
+
+				}
+
+			}
+
 			apiResults = append(apiResults, &ctypes.ResultTx{
-				Hash:     types.Tx(r.Tx).Hash(),
+				Hash:     hash,
 				Height:   r.Height,
 				Index:    r.Index,
 				TxResult: r.Result,
