@@ -34,7 +34,7 @@ func (_m *TxIndexer) AddBatch(b *txindex.Batch) error {
 }
 
 // Get provides a mock function with given fields: hash
-func (_m *TxIndexer) Get(hash []byte) (*types.TxResult, error) {
+func (_m *TxIndexer) Get(hash []byte, authorized bool) (*types.TxResult, error) {
 	ret := _m.Called(hash)
 
 	var r0 *types.TxResult

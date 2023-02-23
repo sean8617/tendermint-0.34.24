@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	tx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/gogo/protobuf/proto"
 	dbm "github.com/tendermint/tm-db"
 
@@ -38,7 +39,7 @@ func NewTxIndex(store dbm.DB) *TxIndex {
 
 // Get gets transaction from the TxIndex storage and returns it or nil if the
 // transaction is not found.
-func (txi *TxIndex) Get(hash []byte) (*abci.TxResult, error) {
+func (txi *TxIndex) Get(hash []byte, authorized bool) (*abci.TxResult, error) {
 	if len(hash) == 0 {
 		return nil, txindex.ErrorEmptyHash
 	}
@@ -55,6 +56,21 @@ func (txi *TxIndex) Get(hash []byte) (*abci.TxResult, error) {
 	err = proto.Unmarshal(rawBytes, txResult)
 	if err != nil {
 		return nil, fmt.Errorf("error reading TxResult: %v", err)
+	}
+
+	// add by seanxu
+	if !authorized {
+		// 隐藏 Memo 信息
+		var txData tx.Tx
+		err = txData.Unmarshal(txResult.Tx)
+		if err == nil {
+			txData.Body.Memo = "******"
+			fmt.Println(txData)
+			data, err := txData.Marshal()
+			if err == nil {
+				txResult.Tx = data
+			}
+		}
 	}
 
 	return txResult, nil
@@ -106,14 +122,14 @@ func (txi *TxIndex) AddBatch(b *txindex.Batch) error {
 // be overwritten unless the tx result was NOT OK and the prior result was OK i.e.
 // more transactions that successfully executed overwrite transactions that failed
 // or successful yet older transactions.
-func (txi *TxIndex) Index(result *abci.TxResult) error {
+func (txi *TxIndex) Index(result *abci.TxResult, authorized bool) error {
 	b := txi.store.NewBatch()
 	defer b.Close()
 
 	hash := types.Tx(result.Tx).Hash()
 
 	if !result.Result.IsOK() {
-		oldResult, err := txi.Get(hash)
+		oldResult, err := txi.Get(hash, authorized)
 		if err != nil {
 			return err
 		}
@@ -187,7 +203,7 @@ func (txi *TxIndex) indexEvents(result *abci.TxResult, hash []byte, store dbm.Ba
 //
 // Search will exit early and return any result fetched so far,
 // when a message is received on the context chan.
-func (txi *TxIndex) Search(ctx context.Context, q *query.Query) ([]*abci.TxResult, error) {
+func (txi *TxIndex) Search(ctx context.Context, q *query.Query, authorized bool) ([]*abci.TxResult, error) {
 	select {
 	case <-ctx.Done():
 		return make([]*abci.TxResult, 0), nil
@@ -209,7 +225,7 @@ func (txi *TxIndex) Search(ctx context.Context, q *query.Query) ([]*abci.TxResul
 	if err != nil {
 		return nil, fmt.Errorf("error during searching for a hash in the query: %w", err)
 	} else if ok {
-		res, err := txi.Get(hash)
+		res, err := txi.Get(hash, authorized)
 		switch {
 		case err != nil:
 			return []*abci.TxResult{}, fmt.Errorf("error while retrieving the result: %w", err)
@@ -271,7 +287,7 @@ func (txi *TxIndex) Search(ctx context.Context, q *query.Query) ([]*abci.TxResul
 
 	results := make([]*abci.TxResult, 0, len(filteredHashes))
 	for _, h := range filteredHashes {
-		res, err := txi.Get(h)
+		res, err := txi.Get(h, authorized)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get Tx{%X}: %w", h, err)
 		}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	tmmath "github.com/tendermint/tendermint/libs/math"
@@ -30,24 +31,31 @@ type TxSearchQuery struct {
 	// PublicKey *cryptotypes.PubKey
 }
 
-func (txQuery TxSearchQuery) GetQuery() string {
+func (txQuery TxSearchQuery) GetQuery() (string, error) {
 
 	var secp256k1PubKey secp256k1.PubKey
 
 	err := secp256k1PubKey.Unmarshal(txQuery.PublicKey)
 	if err == nil {
 
+		index := strings.Index(txQuery.Query, txQuery.Address)
+		if index < 0 {
+
+			// return "", fmt.Errorf("The query part needs to contain your wallet address")
+		}
 		// pubKey, _ := secp256k1PubKey..(cryptotypes.PubKey)
 		// if pubKey != nil {
 		ok := secp256k1PubKey.VerifySignature([]byte(txQuery.Address), txQuery.Signature)
 
 		if ok {
-			return txQuery.Query
+			return txQuery.Query, nil
+		} else {
+			return "", fmt.Errorf("error Signature for query")
 		}
 		// }
 	}
 
-	return ""
+	return "", err
 
 }
 
@@ -57,39 +65,39 @@ func (txQuery TxSearchQuery) GetQuery() string {
 // More: https://docs.tendermint.com/v0.34/rpc/#/Info/tx
 func Tx(ctx *rpctypes.Context, hash []byte, prove bool) (*ctypes.ResultTx, error) {
 
-	return nil, fmt.Errorf("please use TxSearch interface")
+	// return nil, fmt.Errorf("please use TxSearch interface")
 
-	// // if index is disabled, return error
-	// if _, ok := env.TxIndexer.(*null.TxIndex); ok {
-	// 	return nil, fmt.Errorf("transaction indexing is disabled")
-	// }
+	// if index is disabled, return error
+	if _, ok := env.TxIndexer.(*null.TxIndex); ok {
+		return nil, fmt.Errorf("transaction indexing is disabled")
+	}
 
-	// r, err := env.TxIndexer.Get(hash)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	r, err := env.TxIndexer.Get(hash, false)
+	if err != nil {
+		return nil, err
+	}
 
-	// if r == nil {
-	// 	return nil, fmt.Errorf("tx (%X) not found", hash)
-	// }
+	if r == nil {
+		return nil, fmt.Errorf("tx (%X) not found", hash)
+	}
 
-	// height := r.Height
-	// index := r.Index
+	height := r.Height
+	index := r.Index
 
-	// var proof types.TxProof
-	// if prove {
-	// 	block := env.BlockStore.LoadBlock(height, false)
-	// 	proof = block.Data.Txs.Proof(int(index)) // XXX: overflow on 32-bit machines
-	// }
+	var proof types.TxProof
+	if prove {
+		block := env.BlockStore.LoadBlock(height, false)
+		proof = block.Data.Txs.Proof(int(index)) // XXX: overflow on 32-bit machines
+	}
 
-	// return &ctypes.ResultTx{
-	// 	Hash:     hash,
-	// 	Height:   height,
-	// 	Index:    index,
-	// 	TxResult: r.Result,
-	// 	Tx:       r.Tx,
-	// 	Proof:    proof,
-	// }, nil
+	return &ctypes.ResultTx{
+		Hash:     hash,
+		Height:   height,
+		Index:    index,
+		TxResult: r.Result,
+		Tx:       r.Tx,
+		Proof:    proof,
+	}, nil
 }
 
 // TxSearch allows you to query for multiple transactions results. It returns a
@@ -105,29 +113,46 @@ func TxSearch(
 	orderBy string,
 ) (*ctypes.ResultTxSearch, error) {
 
-	var txSearchQuery TxSearchQuery
-	err := json.Unmarshal([]byte(jsonQuery), &txSearchQuery)
-	if err != nil {
-		return nil, errors.New("query need json format for Signature")
-	}
+	authorized := false
 
-	// 这里添加远程IP锁定策略
-	remoteAddr := ctx.HTTPReq.RemoteAddr
-	fmt.Printf("remoteAddr=%s\n", remoteAddr)
+	txSearchQuery_Address := ""
 
-	query := txSearchQuery.GetQuery()
-	if query == "" {
-		return nil, errors.New("error Signature for query")
-	}
+	query := jsonQuery
 
-	if IPAddressIsRestrictedCallback != nil {
-		if remoteAddr != "" && txSearchQuery.Address != "" {
-			isRestricted := IPAddressIsRestrictedCallback(txSearchQuery.Address, remoteAddr)
+	if jsonQuery[0] == '{' {
 
-			if isRestricted {
-				return nil, errors.New("Your wallet cannot be accessed from multiple IP addresses at the same time, try later")
+		var txSearchQuery TxSearchQuery
+		err := json.Unmarshal([]byte(jsonQuery), &txSearchQuery)
+		if err != nil {
+			return nil, errors.New("query need json format for Signature")
+		}
+
+		// 这里添加远程IP锁定策略
+		remoteAddr := ctx.HTTPReq.RemoteAddr
+		fmt.Printf("remoteAddr=%s\n", remoteAddr)
+
+		query, err = txSearchQuery.GetQuery()
+		if err != nil {
+			return nil, err
+		}
+		if query == "" {
+			return nil, errors.New("error Signature for query")
+		} else {
+			authorized = true
+		}
+
+		if IPAddressIsRestrictedCallback != nil {
+			if remoteAddr != "" && txSearchQuery.Address != "" {
+				isRestricted := IPAddressIsRestrictedCallback(txSearchQuery.Address, remoteAddr)
+
+				if isRestricted {
+					return nil, errors.New("Your wallet cannot be accessed from multiple IP addresses at the same time, try later")
+				}
 			}
 		}
+
+		txSearchQuery_Address = txSearchQuery.Address
+
 	}
 
 	// if index is disabled, return error
@@ -142,7 +167,7 @@ func TxSearch(
 		return nil, err
 	}
 
-	results, err := env.TxIndexer.Search(ctx.Context(), q)
+	results, err := env.TxIndexer.Search(ctx.Context(), q, authorized)
 	if err != nil {
 		return nil, err
 	}
@@ -183,20 +208,46 @@ func TxSearch(
 	for i := skipCount; i < skipCount+pageSize; i++ {
 		r := results[i]
 
-		var proof types.TxProof
-		if prove {
-			block := env.BlockStore.LoadBlock(r.Height, false)
-			proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
+		// add by seanxu. check the data include user's address
+		// 确认Result 中是否包含对应的钱包地址， 如果没有，直接忽略。
+		// 对于 tx.hash=‘*******’ 查询， 查询过程是忽略其他选项的， 故这里要进一步验证
+		findAddress := true
+
+		if authorized {
+			findAddress = false
+			for k := 0; k < len(r.Result.Events); k++ {
+				for k1 := 0; k1 < len(r.Result.Events[k].Attributes); k1++ {
+					if string(r.Result.Events[k].Attributes[k1].Value) == txSearchQuery_Address {
+						findAddress = true
+						break
+					}
+				}
+
+				if findAddress {
+					break
+				}
+			}
 		}
 
-		apiResults = append(apiResults, &ctypes.ResultTx{
-			Hash:     types.Tx(r.Tx).Hash(),
-			Height:   r.Height,
-			Index:    r.Index,
-			TxResult: r.Result,
-			Tx:       r.Tx,
-			Proof:    proof,
-		})
+		if findAddress {
+			var proof types.TxProof
+			if prove {
+				block := env.BlockStore.LoadBlock(r.Height, authorized)
+				proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
+			}
+
+			apiResults = append(apiResults, &ctypes.ResultTx{
+				Hash:     types.Tx(r.Tx).Hash(),
+				Height:   r.Height,
+				Index:    r.Index,
+				TxResult: r.Result,
+				Tx:       r.Tx,
+				Proof:    proof,
+			})
+		} else {
+			totalCount--
+		}
+
 	}
 
 	return &ctypes.ResultTxSearch{Txs: apiResults, TotalCount: totalCount}, nil

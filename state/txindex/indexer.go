@@ -18,14 +18,14 @@ type TxIndexer interface {
 	AddBatch(b *Batch) error
 
 	// Index analyzes, indexes and stores a single transaction.
-	Index(result *abci.TxResult) error
+	Index(result *abci.TxResult, authorized bool) error
 
 	// Get returns the transaction specified by hash or nil if the transaction is not indexed
 	// or stored.
-	Get(hash []byte) (*abci.TxResult, error)
+	Get(hash []byte, authorized bool) (*abci.TxResult, error)
 
 	// Search allows you to query for transactions.
-	Search(ctx context.Context, q *query.Query) ([]*abci.TxResult, error)
+	Search(ctx context.Context, q *query.Query, authorized bool) ([]*abci.TxResult, error)
 }
 
 // Batch groups together multiple Index operations to be performed at the same time.

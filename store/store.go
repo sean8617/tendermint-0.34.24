@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	tx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/gogo/protobuf/proto"
 	dbm "github.com/tendermint/tm-db"
 
@@ -133,6 +134,23 @@ func (bs *BlockStore) LoadBlock(height int64, forRespondToPeer bool) *types.Bloc
 
 	// 	}
 	// }
+
+	// modify by seanxu
+	if !forRespondToPeer {
+		// 隐藏Memo信息
+		for n := 0; n < len(block.Data.Txs); n++ {
+			var txData tx.Tx
+			err := txData.Unmarshal(block.Data.Txs[n])
+			if err == nil {
+				txData.Body.Memo = "******"
+				fmt.Println(txData)
+				data, err := txData.Marshal()
+				if err == nil {
+					block.Data.Txs[n] = data
+				}
+			}
+		}
+	}
 
 	return block
 }
