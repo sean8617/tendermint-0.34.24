@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,20 +25,33 @@ type IPAddressIsRestrictedCallbackFunc func(address string, ip string) bool
 
 var IPAddressIsRestrictedCallback IPAddressIsRestrictedCallbackFunc
 
+// Signature 和 PublicKey 使用二进制数字字符串， 以便与VUE客户端兼容
 type TxSearchQuery struct {
 	Query     string
 	Address   string
-	Signature []byte
-	PublicKey []byte
-
-	// PublicKey *cryptotypes.PubKey
+	Signature string
+	PublicKey string
 }
 
 func (txQuery TxSearchQuery) GetQuery() (string, error) {
 
-	var secp256k1PubKey secp256k1.PubKey
+	// var secp256k1PubKey secp256k1.PubKey
 
-	err := secp256k1PubKey.Unmarshal(txQuery.PublicKey)
+	publicKey, err := hex.DecodeString(txQuery.PublicKey)
+	if err != nil {
+		return "", err
+	}
+
+	signature, err := hex.DecodeString(txQuery.Signature)
+	if err != nil {
+		return "", err
+	}
+	// err = secp256k1PubKey.Unmarshal(publicKey)
+
+	secp256k1PubKey := secp256k1.PubKey{
+		Key: publicKey,
+	}
+
 	if err == nil {
 
 		index := strings.Index(txQuery.Query, txQuery.Address)
@@ -47,7 +61,7 @@ func (txQuery TxSearchQuery) GetQuery() (string, error) {
 		}
 		// pubKey, _ := secp256k1PubKey..(cryptotypes.PubKey)
 		// if pubKey != nil {
-		ok := secp256k1PubKey.VerifySignature([]byte(txQuery.Address), txQuery.Signature)
+		ok := secp256k1PubKey.VerifySignature([]byte(txQuery.Address), signature)
 
 		if ok {
 			return txQuery.Query, nil
@@ -130,8 +144,12 @@ func TxSearch(
 		}
 
 		// 这里添加远程IP锁定策略
-		remoteAddr := ctx.HTTPReq.RemoteAddr
-		fmt.Printf("remoteAddr=%s\n", remoteAddr)
+		remoteAddr := ""
+
+		if ctx.HTTPReq != nil {
+			remoteAddr = ctx.HTTPReq.RemoteAddr
+			fmt.Printf("remoteAddr=%s\n", remoteAddr)
+		}
 
 		query, err = txSearchQuery.GetQuery()
 		if err != nil {
