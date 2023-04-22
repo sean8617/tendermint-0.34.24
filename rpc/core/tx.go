@@ -249,12 +249,21 @@ func TxSearch(
 			}
 		}
 
+		// timeStamp := int64(0)
+
 		if findAddress {
 			hash := types.Tx(r.Tx).Hash()
 			var proof types.TxProof
-			if prove {
+			if prove || authorized {
 				block := env.BlockStore.LoadBlock(r.Height, authorized)
-				proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
+
+				//添加时间戳
+				timeStamp := block.Header.Time.Unix()
+				r.Result.Info = fmt.Sprintf("{\"timeStamp\": %d}", timeStamp)
+
+				if prove {
+					proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
+				}
 			}
 
 			if !authorized {
